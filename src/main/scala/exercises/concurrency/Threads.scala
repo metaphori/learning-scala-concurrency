@@ -70,3 +70,31 @@ object ReorderingBugFixed extends App {
     assert(!(x == 1 && y == 1), s"x = $x, y = $y")
   }
 }
+
+class BoxBad(init: Int = 0){
+  var i = init
+  def moveInto(b2: BoxBad) = this.synchronized { b2.synchronized{ b2.i += i; i -= i; } }
+}
+
+class BoxOk(init: Int = 0){
+  var i = init
+  def moveInto(b2: BoxOk) =
+    if(this.hashCode()>b2.hashCode()) { this.synchronized { b2.synchronized{ b2.i += i; i -= i; } } }
+    else { b2.synchronized { this.synchronized{ b2.i += i; i -= i; } } }
+}
+
+object Deadlock extends App {
+  val b1 = new BoxBad(50); val b2 = new BoxBad(100)
+  val t1 = thread { for(i <- 1 to 10000){ b1.moveInto(b2) } }
+  val t2 = thread { for(i <- 1 to 10000){ b2.moveInto(b1) } }
+  t1.join(); t2.join();
+  println(s"b1 = ${b1.i}; b2 = ${b2.i}")
+}
+
+object DeadlockSolved extends App {
+  val b1 = new BoxOk(50); val b2 = new BoxOk(100)
+  val t1 = thread { for(i <- 1 to 10000){ b1.moveInto(b2) } }
+  val t2 = thread { for(i <- 1 to 10000){ b2.moveInto(b1) } }
+  t1.join(); t2.join();
+  println(s"b1 = ${b1.i}; b2 = ${b2.i}") // But notice that result depends on ordering
+}
