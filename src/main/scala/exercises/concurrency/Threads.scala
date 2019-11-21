@@ -24,6 +24,7 @@ object Utils {
 import java.util.concurrent.TimeUnit
 
 import Utils._
+import exercises.concurrency.SynchronizedPoolOk.tasks
 
 object RaceConds extends App {
   var k = 0
@@ -144,4 +145,33 @@ object SynchronizedPoolOk extends App {
   asynchronous { print("!") }
   asynchronous { print("?")}
   Thread.sleep(20000)
+}
+
+object GracefulShutdownExample extends App {
+  private val tasks = scala.collection.mutable.Queue[() => Unit]()
+  def asynchronous(body: =>Unit) = tasks.synchronized { tasks.enqueue(() => body); tasks.notify() }
+
+  object Worker extends Thread {
+    var terminated = false
+
+    def poll(): Option[() => Unit] = tasks.synchronized {
+      while (tasks.isEmpty && !terminated) tasks.wait()
+      if (!terminated) Some(tasks.dequeue()) else None
+    }
+
+    @scala.annotation.tailrec override def run() = poll() match {
+      case Some(task) => task(); run()
+      case None => println("Bye bye")
+    }
+
+    def shutdown() = tasks.synchronized { terminated = true; tasks.notify() }
+  }
+
+  Worker.start()
+
+  asynchronous{ println("Hello") }
+
+  Thread.sleep(1000)
+  Worker.shutdown()
+  Thread.sleep(1000)
 }
