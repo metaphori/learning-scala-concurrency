@@ -98,3 +98,50 @@ object DeadlockSolved extends App {
   t1.join(); t2.join();
   println(s"b1 = ${b1.i}; b2 = ${b2.i}") // But notice that result depends on ordering
 }
+
+object SynchronizedPoolBad extends App {
+  private val tasks = scala.collection.mutable.Queue[() => Unit]()
+  def asynchronous(body: =>Unit) = tasks.synchronized { tasks.enqueue(() => body) }
+  val worker = new Thread {
+    def poll(): Option[() => Unit] = tasks.synchronized {
+      if (tasks.nonEmpty) Some(tasks.dequeue()) else None
+    }
+    override def run() = while (true) poll() match {
+      case Some(task) => task(); case None =>
+    } // BUSY WAITING!!!
+  }
+  worker.setDaemon(true) // JVM terminates when all non-daemon threads terminate
+  worker.start()
+  asynchronous { print("!") }
+  asynchronous { print("?")}
+  Thread.sleep(2000)
+}
+
+object SynchronizedGuardedBlocks extends App {
+  val lock = new AnyRef
+  var message: Option[String] = None
+  val greeter = thread { lock.synchronized {
+      while (message == None) lock.wait(); println(message.get)
+  } }
+  lock.synchronized { message = Some("Hello!"); lock.notify() }
+  greeter.join()
+}
+
+object SynchronizedPoolOk extends App {
+  private val tasks = scala.collection.mutable.Queue[() => Unit]()
+  def asynchronous(body: =>Unit) = tasks.synchronized { tasks.enqueue(() => body); tasks.notify() }
+  val worker = new Thread {
+    def poll(): () => Unit = tasks.synchronized {
+      while (tasks.isEmpty) tasks.wait()
+      tasks.dequeue()
+    }
+    override def run() = while (true) poll() match {
+      case task => task()
+    } // BUSY WAITING!!!
+  }
+  worker.setDaemon(true) // JVM terminates when all non-daemon threads terminate
+  worker.start()
+  asynchronous { print("!") }
+  asynchronous { print("?")}
+  Thread.sleep(20000)
+}
