@@ -72,6 +72,16 @@ object ReorderingBugFixed extends App {
   }
 }
 
+object ReorderingBugFixed2 extends App {
+  for (i <- 0 until 100000) {
+    @volatile var a = false; @volatile var b = false; var x = -1; var y = -1
+    val t1 = thread { a = true; y = if (b) 0 else 1 }
+    val t2 = thread { b = true; x = if (a) 0 else 1 }
+    t1.join(); t2.join()
+    assert(!(x == 1 && y == 1), s"x = $x, y = $y")
+  }
+}
+
 class BoxBad(init: Int = 0){
   var i = init
   def moveInto(b2: BoxBad) = this.synchronized { b2.synchronized{ b2.i += i; i -= i; } }
